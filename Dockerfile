@@ -1,5 +1,4 @@
 FROM ubuntu:20.04
-MAINTAINER Jason Rivers <jason@jasonrivers.co.uk>
 
 ENV NAGIOS_HOME            /opt/nagios
 ENV NAGIOS_USER            nagios
@@ -27,8 +26,9 @@ ENV NAGIOSTV_VERSION       0.8.5
 
 RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set-selections  && \
     echo postfix postfix/mynetworks string "127.0.0.0/8" | debconf-set-selections            && \
-    echo postfix postfix/mailname string ${NAGIOS_FQDN} | debconf-set-selections             && \
-    apt-get update && apt-get install -y    \
+    echo postfix postfix/mailname string ${NAGIOS_FQDN} | debconf-set-selections
+
+RUN apt-get update && apt-get install -y    \
         apache2                             \
         apache2-utils                       \
         autoconf                            \
@@ -37,6 +37,7 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
         bsd-mailx                           \
         build-essential                     \
         dnsutils                            \
+        freetds-dev                         \
         fping                               \
         gettext                             \
         git                                 \
@@ -57,6 +58,7 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
         libgdchart-gd2-xpm-dev              \
         libgd-gd2-perl                      \
         libjson-perl                        \
+        libkrb5-dev                         \
         libldap2-dev                        \
         libmonitoring-plugin-perl           \
         libmysqlclient-dev                  \
@@ -79,6 +81,7 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
         php-gd                              \
         postfix                             \
         python3-pip                         \
+        python3-dev                         \
         python3-nagiosplugin                \
         rsync                               \
         rsyslog                             \
@@ -150,25 +153,23 @@ RUN wget -O ${NAGIOS_HOME}/libexec/check_ncpa.py https://raw.githubusercontent.c
     chmod +x ${NAGIOS_HOME}/libexec/check_ncpa.py
 
 RUN cd /tmp                                                                  && \
-    git clone https://github.com/NagiosEnterprises/nrpe.git -b $NRPE_BRANCH  && \
-    cd nrpe                                                                  && \
-    ./configure                                   \
-        --with-ssl=/usr/bin/openssl               \
-        --with-ssl-lib=/usr/lib/x86_64-linux-gnu  \
-                                                                             && \
-    make check_nrpe                                                          && \
-    cp src/check_nrpe ${NAGIOS_HOME}/libexec/                                && \
-    make clean                                                               && \
+    git clone https://github.com/NagiosEnterprises/nrpe.git -b $NRPE_BRANCH
+RUN cd /tmp/nrpe                                    && \
+    ./configure                                     && \
+    make check_nrpe                                 && \
+    cd /tmp/nrpe                                    && \
+    cp src/check_nrpe ${NAGIOS_HOME}/libexec/       && \
+    make clean                                      && \
     cd /tmp && rm -Rf nrpe
 
 RUN cd /tmp                                                 && \
     git clone https://github.com/NagiosEnterprises/nsca.git && \
     cd nsca                                                 && \
-    git checkout $NSCA_TAG                                  && \
-    ./configure                                                \
-        --prefix=${NAGIOS_HOME}                                \
-        --with-nsca-user=${NAGIOS_USER}                        \
-        --with-nsca-grp=${NAGIOS_GROUP}                     && \
+    git checkout $NSCA_TAG            
+RUN cd /tmp/nsca && \
+    wget -O config.guess http://savannah.gnu.org/cgi-bin/viewcvs/*checkout*/config/config/config.guess && \
+    wget -O config.sub http://savannah.gnu.org/cgi-bin/viewcvs/*checkout*/config/config/config.sub && \
+    ./configure --prefix=${NAGIOS_HOME} --with-nsca-user=${NAGIOS_USER} --with-nsca-grp=${NAGIOS_GROUP} && \
     make all                                                && \
     cp src/nsca ${NAGIOS_HOME}/bin/                         && \
     cp src/send_nsca ${NAGIOS_HOME}/bin/                    && \
@@ -190,26 +191,29 @@ RUN cd /tmp                                                          && \
     cp share/nagiosgraph.ssi ${NAGIOS_HOME}/share/ssi/common-header.ssi && \
     cd /tmp && rm -Rf nagiosgraph
 
-RUN cd /opt                                                                         && \
-    pip install pymssql paho-mqtt pymssql                                           && \
-    git clone https://github.com/willixix/naglio-plugins.git     WL-Nagios-Plugins  && \
-    git clone https://github.com/JasonRivers/nagios-plugins.git  JR-Nagios-Plugins  && \
-    git clone https://github.com/justintime/nagios-plugins.git   JE-Nagios-Plugins  && \
-    git clone https://github.com/nagiosenterprises/check_mssql_collection.git   nagios-mssql  && \
-    git clone https://github.com/jpmens/check-mqtt.git           jpmens-mqtt        && \
-    git clone https://github.com/danfruehauf/nagios-plugins.git  DF-Nagios-Plugins  && \
-    chmod +x /opt/WL-Nagios-Plugins/check*                                          && \
-    chmod +x /opt/JE-Nagios-Plugins/check_mem/check_mem.pl                          && \
-    chmod +x /opt/jpmens-mqtt/check-mqtt.py                                         && \
-    chmod +x /opt/DF-Nagios-Plugins/check_sql/check_sql                             && \
-    chmod +x /opt/DF-Nagios-Plugins/check_jenkins/check_jenkins                     && \
-    chmod +x /opt/DF-Nagios-Plugins/check_vpn/check_vpn                             && \
-    cp /opt/JE-Nagios-Plugins/check_mem/check_mem.pl ${NAGIOS_HOME}/libexec/        && \
-    cp /opt/nagios-mssql/check_mssql_database.py ${NAGIOS_HOME}/libexec/            && \
-    cp /opt/nagios-mssql/check_mssql_server.py ${NAGIOS_HOME}/libexec/              && \
-    cp /opt/jpmens-mqtt/check-mqtt.py ${NAGIOS_HOME}/libexec/                       && \
-    cp /opt/DF-Nagios-Plugins/check_sql/check_sql ${NAGIOS_HOME}/libexec/           && \
-    cp /opt/DF-Nagios-Plugins/check_jenkins/check_jenkins ${NAGIOS_HOME}/libexec/   && \
+
+
+RUN cd /opt                                                                                     && \                                        
+    pip install --upgrade pip                                                                   && \
+    pip install pymssql paho-mqtt                                                               && \
+    git clone https://github.com/willixix/naglio-plugins.git     WL-Nagios-Plugins              && \
+    git clone https://github.com/JasonRivers/nagios-plugins.git  JR-Nagios-Plugins              && \
+    git clone https://github.com/justintime/nagios-plugins.git   JE-Nagios-Plugins              && \
+    git clone https://github.com/nagiosenterprises/check_mssql_collection.git   nagios-mssql    && \
+    git clone https://github.com/jpmens/check-mqtt.git           jpmens-mqtt                    && \
+    git clone https://github.com/danfruehauf/nagios-plugins.git  DF-Nagios-Plugins              && \
+    chmod +x /opt/WL-Nagios-Plugins/check*                                                      && \
+    chmod +x /opt/JE-Nagios-Plugins/check_mem/check_mem.pl                                      && \
+    chmod +x /opt/jpmens-mqtt/check-mqtt.py                                                     && \
+    chmod +x /opt/DF-Nagios-Plugins/check_sql/check_sql                                         && \
+    chmod +x /opt/DF-Nagios-Plugins/check_jenkins/check_jenkins                                 && \
+    chmod +x /opt/DF-Nagios-Plugins/check_vpn/check_vpn                                         && \
+    cp /opt/JE-Nagios-Plugins/check_mem/check_mem.pl ${NAGIOS_HOME}/libexec/                    && \
+    cp /opt/nagios-mssql/check_mssql_database.py ${NAGIOS_HOME}/libexec/                        && \
+    cp /opt/nagios-mssql/check_mssql_server.py ${NAGIOS_HOME}/libexec/                          && \
+    cp /opt/jpmens-mqtt/check-mqtt.py ${NAGIOS_HOME}/libexec/                                   && \
+    cp /opt/DF-Nagios-Plugins/check_sql/check_sql ${NAGIOS_HOME}/libexec/                       && \
+    cp /opt/DF-Nagios-Plugins/check_jenkins/check_jenkins ${NAGIOS_HOME}/libexec/               && \
     cp /opt/DF-Nagios-Plugins/check_vpn/check_vpn ${NAGIOS_HOME}/libexec/
 
 RUN cd /tmp && \
